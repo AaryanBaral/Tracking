@@ -41,7 +41,7 @@ public static class AuthEndpoints
             .FirstOrDefaultAsync(u => u.Email == email && u.IsActive, ct);
         if (user is null)
         {
-            logger.LogWarning("Login failed for {email}: user not found.", email);
+            logger.LogWarning("Login failed.");
             return Results.Unauthorized();
         }
 
@@ -52,14 +52,14 @@ public static class AuthEndpoints
                 .FirstOrDefaultAsync(c => c.Id == user.CompanyId && c.IsActive, ct);
             if (company is null)
             {
-                logger.LogWarning("Login failed for {email}: company inactive.", email);
+                logger.LogWarning("Login failed.");
                 return Results.Unauthorized();
             }
         }
 
         if (!PasswordHasher.Verify(request.Password, user.PasswordHash))
         {
-            logger.LogWarning("Login failed for {email}: invalid password.", email);
+            logger.LogWarning("Login failed.");
             return Results.Unauthorized();
         }
 

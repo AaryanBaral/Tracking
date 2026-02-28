@@ -66,15 +66,20 @@ public sealed class HeartbeatWorker : BackgroundService
                 deviceId,
                 hostname,
                 DateTimeOffset.UtcNow);
-
-            var resp = await client.PostAsJsonAsync(_config.DeviceHeartbeatEndpoint, req, ct);
+            var correlationId = Guid.NewGuid().ToString("N");
+            using var request = new HttpRequestMessage(HttpMethod.Post, _config.DeviceHeartbeatEndpoint)
+            {
+                Content = JsonContent.Create(req)
+            };
+            request.Headers.TryAddWithoutValidation("X-Correlation-ID", correlationId);
+            var resp = await client.SendAsync(request, ct);
             if (!resp.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Heartbeat failed: {status}", resp.StatusCode);
+                _logger.LogWarning("Heartbeat failed. CorrelationId={correlationId} Status={status}", correlationId, resp.StatusCode);
                 return false;
             }
 
-            _logger.LogDebug("Heartbeat OK for device {deviceId}", deviceId);
+            _logger.LogDebug("Heartbeat OK for device {deviceId}. CorrelationId={correlationId}", deviceId, correlationId);
             return true;
         }
         catch (Exception ex)

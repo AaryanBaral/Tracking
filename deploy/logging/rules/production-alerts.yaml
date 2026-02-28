@@ -1,0 +1,47 @@
+groups:
+  - name: employee-tracker-production
+    interval: 1m
+    rules:
+      - alert: TrackerApiCrashLoop
+        expr: |
+          count_over_time({job="docker"} |= "Tracker API terminated unexpectedly." [10m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: tracker-api
+        annotations:
+          summary: "Tracker API process terminated unexpectedly"
+          description: "A critical crash signature was detected in tracker-api logs."
+
+      - alert: TrackerApiHigh5xx
+        expr: |
+          sum(rate({job="docker"} |= "Request failed." |= "Status=5" [5m])) > 3
+        for: 5m
+        labels:
+          severity: critical
+          service: tracker-api
+        annotations:
+          summary: "Tracker API elevated 5xx rate"
+          description: "Request failures with 5xx signatures exceeded threshold for 5 minutes."
+
+      - alert: AgentHeartbeatFailures
+        expr: |
+          count_over_time({job="docker"} |= "Heartbeat failed." [10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-service
+        annotations:
+          summary: "Agent heartbeat failures detected"
+          description: "Multiple heartbeat failures were detected from agents in the last 10 minutes."
+
+      - alert: AgentOutboxSendFailures
+        expr: |
+          count_over_time({job="docker"} |= "Failed to send batch" [10m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-service
+        annotations:
+          summary: "Agent outbox delivery failures are rising"
+          description: "Agent outbox send failures crossed warning threshold."

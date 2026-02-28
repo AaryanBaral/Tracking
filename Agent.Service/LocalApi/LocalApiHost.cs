@@ -205,12 +205,10 @@ public sealed class LocalApiHost
             return Results.BadRequest("eventId and domain are required.");
         }
 
-        logger.LogInformation(
-            "Web event received. DeviceId={deviceId} Domain={domain} Url={url} Title={title} Browser={browser} Timestamp={timestamp}",
+        logger.LogDebug(
+            "Web event received. DeviceId={deviceId} Domain={domain} Browser={browser} Timestamp={timestamp}",
             _deviceId,
             evt.Domain,
-            evt.Url,
-            evt.Title,
             evt.Browser,
             evt.Timestamp);
 

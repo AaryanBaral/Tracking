@@ -95,9 +95,5 @@ public sealed class AdminSeeder
 
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("Seeded admin user {email} with role {role}.", email, user.Role);
-        if (!string.IsNullOrWhiteSpace(enrollmentKey))
-        {
-            _logger.LogInformation("Seeded company enrollment key: {key}", enrollmentKey);
-        }
     }
 }

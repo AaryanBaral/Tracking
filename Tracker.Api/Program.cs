@@ -15,7 +15,13 @@ builder.WebHost.ConfigureKestrel(o =>
     o.Limits.MaxRequestBodySize = 10 * 1024 * 1024;
 });
 builder.Services.AddDbContext<TrackerDbContext>(o =>
-    o.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")).EnableSensitiveDataLogging());
+{
+    o.UseNpgsql(builder.Configuration.GetConnectionString("Postgres"));
+    if (builder.Environment.IsDevelopment())
+    {
+        o.EnableSensitiveDataLogging();
+    }
+});
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("ui", policy =>
@@ -53,41 +59,65 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+// Fail fast at boot if the primary database is unreachable.
+await using (var startupScope = app.Services.CreateAsyncScope())
+{
+    var db = startupScope.ServiceProvider.GetRequiredService<TrackerDbContext>();
+    try
+    {
+        // Force an actual open to get a concrete provider/network/auth failure reason.
+        await db.Database.OpenConnectionAsync();
+
+        var conn = db.Database.GetDbConnection();
+        app.Logger.LogInformation(
+            "Database connectivity check passed. DataSource={dataSource} Database={database}",
+            conn.DataSource,
+            conn.Database);
+
+        await db.Database.CloseConnectionAsync();
+    }
+    catch (Exception ex)
+    {
+        var reason = ex.GetBaseException().Message;
+        app.Logger.LogCritical(
+            ex,
+            "Database connectivity check failed at startup. Reason={reason}. Aborting boot.",
+            reason);
+        throw new InvalidOperationException($"Database connectivity check failed: {reason}", ex);
+    }
+}
+
 app.UseCors("ui");
 app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        var feature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
+        var ex = feature?.Error;
+        var correlationId = context.Response.Headers["X-Correlation-ID"].FirstOrDefault()
+            ?? context.TraceIdentifier;
+
+        logger.LogError(
+            ex,
+            "Unhandled exception. CorrelationId={correlationId} Route={route} Method={method}",
+            correlationId,
+            feature?.Path ?? context.Request.Path.Value ?? "(unknown)",
+            context.Request.Method);
+
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            error = "internal_server_error",
+            correlationId
+        });
+    });
+});
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
-app.Use(async (context, next) =>
-{
-    if (context.Request.Path.StartsWithSegments("/auth"))
-    {
-        await next();
-        return;
-    }
-
-    if (context.Request.ContentLength is > 0)
-    {
-        context.Request.EnableBuffering();
-        using var reader = new StreamReader(
-            context.Request.Body,
-            Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: false,
-            leaveOpen: true);
-        var body = await reader.ReadToEndAsync();
-        context.Request.Body.Position = 0;
-        if (!string.IsNullOrWhiteSpace(body))
-        {
-            app.Logger.LogInformation(
-                "Request body {method} {path}: {body}",
-                context.Request.Method,
-                context.Request.Path,
-                body);
-        }
-    }
-
-    await next();
-});
 
 app.MapGet("/", () => "Tracker API");
 
@@ -97,4 +127,13 @@ app.MapCompaniesEndpoints();
 app.MapDevicesEndpoints();
 app.MapHealthEndpoints();
 
-await app.RunAsync();
+try
+{
+    app.Logger.LogInformation("Tracker API starting.");
+    await app.RunAsync();
+}
+catch (Exception ex)
+{
+    app.Logger.LogCritical(ex, "Tracker API terminated unexpectedly.");
+    throw;
+}

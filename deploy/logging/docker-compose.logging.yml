@@ -1,0 +1,61 @@
+x-app-logging: &app_logging
+  driver: "json-file"
+  options:
+    max-size: "20m"
+    max-file: "10"
+
+services:
+  tracker-api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: employee-tracker-api:prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://0.0.0.0:5000
+      Logging__Console__FormatterName: json
+      Logging__LogLevel__Default: Warning
+    ports:
+      - "5000:5000"
+    labels:
+      service: tracker-api
+      env: production
+      log_source: app
+    logging: *app_logging
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:2.9.8
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - ./rules:/etc/loki/rules:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    command: --config.file=/etc/alertmanager/alertmanager.yml --config.expand-env
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:?set ALERT_WEBHOOK_URL in environment}
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    restart: unless-stopped
+
+volumes:
+  loki_data:

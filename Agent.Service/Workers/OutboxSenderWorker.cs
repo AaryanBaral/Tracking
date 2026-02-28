@@ -111,6 +111,15 @@ public sealed class OutboxSenderWorker : BackgroundService
             var identity = await _identityStore.GetOrCreateAsync(ct);
             var deviceId = identity.DeviceId.ToString();
             var agentVersion = string.IsNullOrWhiteSpace(identity.AgentVersion) ? "unknown" : identity.AgentVersion;
+            var correlationId = Guid.NewGuid().ToString("N");
+
+            using var scope = _logger.BeginScope(new Dictionary<string, object>
+            {
+                ["CorrelationId"] = correlationId,
+                ["DeviceId"] = deviceId,
+                ["OutboxType"] = type,
+                ["BatchCount"] = batch.Count
+            });
 
             object? payloadToSend = null;
             
@@ -240,16 +249,13 @@ public sealed class OutboxSenderWorker : BackgroundService
                 return;
             }
 
-            if (payloadToSend is AppSessionIngestRequest appPayload)
-            {
-                _logger.LogInformation(
-                    "POST {endpoint} app_session payload: {payload}",
-                    endpoint,
-                    JsonSerializer.Serialize(appPayload));
-            }
-
             var client = _httpClientFactory.CreateClient("backend");
-            var response = await client.PostAsJsonAsync(endpoint, payloadToSend, ct);
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            {
+                Content = JsonContent.Create(payloadToSend)
+            };
+            request.Headers.TryAddWithoutValidation("X-Correlation-ID", correlationId);
+            var response = await client.SendAsync(request, ct);
 
             if (response.IsSuccessStatusCode)
             {
@@ -259,8 +265,7 @@ public sealed class OutboxSenderWorker : BackgroundService
             }
             else
             {
-                var body = await response.Content.ReadAsStringAsync(ct);
-                _logger.LogWarning("Failed to send batch of {type}. Status: {status}. Body: {body}", type, response.StatusCode, body);
+                _logger.LogWarning("Failed to send batch of {type}. Status: {status}", type, response.StatusCode);
                 await _outbox.AbandonAsync(batch.Select(i => i.Id));
             }
         }

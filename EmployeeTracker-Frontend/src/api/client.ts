@@ -1,6 +1,6 @@
 import { clearAuthToken, getAuthToken } from "@/lib/auth";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5002";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/+$/, "");
 
 export class ApiError extends Error {
   constructor(
@@ -54,7 +54,8 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const { method = "GET", body, headers = {} } = options;
 
-  const url = `${API_BASE_URL}${endpoint}`;
+  const normalizedEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE_URL}${normalizedEndpoint}`;
 
   const requestHeaders: Record<string, string> = {
     "Content-Type": "application/json",
@@ -83,7 +84,7 @@ export async function apiRequest<T>(
       throw error;
     }
     // Network error or other fetch failure
-    throw new ApiError(0, "Network Error", "Unable to connect to the API. Please check if the server is running.");
+    throw new ApiError(0, "Network Error", `Unable to connect to the API (${url}). Please check if the server is running.`);
   }
 }
 

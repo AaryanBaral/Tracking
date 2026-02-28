@@ -46,9 +46,9 @@ public sealed class LocalApiHostTests : IAsyncLifetime
         var outboxService = new OutboxService(_outboxRepo);
         var identityStore = new Agent.Service.Identity.DeviceIdentityStore();
 
-        _webSessionizer = new WebSessionizer(outboxService, webLogger);
-        var appSessionizer = new AppSessionizer(outboxService, identityStore, appLogger);
-        var idleSessionizer = new IdleSessionizer(outboxService, identityStore, idleLogger);
+        _webSessionizer = new WebSessionizer(outboxService, webLogger, config);
+        var appSessionizer = new AppSessionizer(outboxService, identityStore, appLogger, config);
+        var idleSessionizer = new IdleSessionizer(outboxService, identityStore, idleLogger, config);
 
         _queue = new WebEventQueue();
         _consumerCts = new CancellationTokenSource();

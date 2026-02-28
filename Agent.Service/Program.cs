@@ -66,9 +66,19 @@ builder.ConfigureServices((context, services) =>
 });
 
 var host = builder.Build();
+var startupLogger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
 
 // Init DB
 var outboxRepo = host.Services.GetRequiredService<OutboxRepository>();
 outboxRepo.Init();
 
-host.Run();
+try
+{
+    startupLogger.LogInformation("Agent.Service starting.");
+    host.Run();
+}
+catch (Exception ex)
+{
+    startupLogger.LogCritical(ex, "Agent.Service terminated unexpectedly.");
+    throw;
+}
