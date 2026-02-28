@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RUN_DOCKER_TESTS)' == '1' Or '$(RUN_DOCKER_TESTS)' == 'true' Or '$(RUN_DOCKER_TESTS)' == 'True' Or '$(CI)' == 'true' Or '$(CI)' == 'True'">
+    <DefineConstants>$(DefineConstants);RUN_DOCKER_TESTS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+  <PackageReference Include="Testcontainers.PostgreSql" Version="4.10.0" />
+
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+<PackageReference Include="xunit" Version="2.7.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Agent.Service\Agent.Service.csproj" />
+    <ProjectReference Include="..\..\Tracker.Api\Tracker.Api.csproj" />
+  </ItemGroup>
+
+</Project>

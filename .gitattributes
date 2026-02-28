@@ -1,0 +1,192 @@
+# ============================================
+# .gitattributes for Employee Tracking System
+# Cross-platform line ending normalization
+# ============================================
+
+# Set default behavior to automatically normalize line endings
+* text=auto
+
+# ============================================
+# Source Code Files - Always LF
+# ============================================
+
+# C# / .NET files
+*.cs text eol=lf
+*.csproj text eol=lf
+*.sln text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.config text eol=lf
+*.json text eol=lf
+*.xml text eol=lf
+
+# React / TypeScript / JavaScript files
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+
+# Configuration files
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.env text eol=lf
+*.env.* text eol=lf
+
+# Web files
+*.html text eol=lf
+*.htm text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.sass text eol=lf
+*.less text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+*.rst text eol=lf
+*.adoc text eol=lf
+
+# SQL files
+*.sql text eol=lf
+
+# ============================================
+# Shell Scripts - Platform Specific
+# ============================================
+
+# Shell scripts (Unix)
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+
+# PowerShell scripts (Windows)
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+
+# Batch files (Windows)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# ============================================
+# Special Files
+# ============================================
+
+# Git files
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.gitmodules text eol=lf
+
+# Docker files
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+.dockerignore text eol=lf
+
+# CI/CD files
+.gitlab-ci.yml text eol=lf
+.travis.yml text eol=lf
+appveyor.yml text eol=lf
+azure-pipelines.yml text eol=lf
+
+# Package manager files
+package.json text eol=lf
+package-lock.json text eol=lf
+yarn.lock text eol=lf
+pnpm-lock.yaml text eol=lf
+*.npmrc text eol=lf
+
+# Editor config
+.editorconfig text eol=lf
+.eslintrc* text eol=lf
+.prettierrc* text eol=lf
+tsconfig*.json text eol=lf
+vite.config.* text eol=lf
+postcss.config.* text eol=lf
+tailwind.config.* text eol=lf
+
+# Deployment files
+*.plist text eol=lf
+
+# ============================================
+# Binary Files - No Line Ending Conversion
+# ============================================
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.webp binary
+*.bmp binary
+*.tiff binary
+
+# Fonts
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+
+# Archives
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.rar binary
+
+# Executables
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.app binary
+
+# Documents
+*.pdf binary
+*.doc binary
+*.docx binary
+*.xls binary
+*.xlsx binary
+*.ppt binary
+*.pptx binary
+
+# Certificates
+*.pfx binary
+*.p12 binary
+*.cer binary
+*.crt binary
+*.key binary
+
+# Database files
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+
+# Other binary files
+*.bin binary
+*.dat binary
+
+# ============================================
+# Special Handling for Generated Files
+# ============================================
+
+# Designer files (keep CRLF for Visual Studio compatibility)
+*.Designer.cs text eol=crlf
+
+# ============================================
+# Export Ignore (files not included in export)
+# ============================================
+
+.gitattributes export-ignore
+.gitignore export-ignore
+.editorconfig export-ignore
+*.md export-ignore
+/tests/ export-ignore
+/docs/ export-ignore
+/scripts/ export-ignore
