@@ -26,6 +26,9 @@ public sealed class LocalApiHost
     private readonly AppSessionizer _appSessionizer;
     private readonly IdleSessionizer _idleSessionizer;
     private readonly WebSessionizer _webSessionizer;
+    private readonly string[] _allowedOrigins;
+    private readonly object _pipStateSync = new();
+    private LocalPipStateResponse _pipState = new(false, false, null, null, DateTimeOffset.UtcNow);
     private IHost? _host;
 
     public int Port { get; set; } = DefaultPort;
@@ -39,7 +42,8 @@ public sealed class LocalApiHost
         OutboxRepository? outboxRepo = null,
         OutboxSenderState? outboxState = null,
         string? deviceId = null,
-        string? agentVersion = null)
+        string? agentVersion = null,
+        IEnumerable<string>? allowedOrigins = null)
     {
         _queue = queue;
         _token = token;
@@ -50,6 +54,11 @@ public sealed class LocalApiHost
         _appSessionizer = appSessionizer;
         _idleSessionizer = idleSessionizer;
         _webSessionizer = webSessionizer;
+        _allowedOrigins = (allowedOrigins ?? Array.Empty<string>())
+            .Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Select(origin => origin.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     public async Task StartAsync(CancellationToken ct)
@@ -72,13 +81,17 @@ public sealed class LocalApiHost
         var app = builder.Build();
         app.Use(async (context, next) =>
         {
-            context.Response.Headers["Access-Control-Allow-Origin"] = "*";
+            var requestOrigin = context.Request.Headers.Origin.ToString();
+            if (string.IsNullOrWhiteSpace(requestOrigin) || IsOriginAllowed(requestOrigin))
+            {
+                context.Response.Headers["Access-Control-Allow-Origin"] = string.IsNullOrWhiteSpace(requestOrigin)
+                    ? "null"
+                    : requestOrigin;
+                context.Response.Headers["Vary"] = "Origin";
+            }
+
             context.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type, X-Agent-Token";
             context.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
-            if (context.Request.Headers.ContainsKey("Access-Control-Request-Private-Network"))
-            {
-                context.Response.Headers["Access-Control-Allow-Private-Network"] = "true";
-            }
 
             if (HttpMethods.Options.Equals(context.Request.Method, StringComparison.OrdinalIgnoreCase))
             {
@@ -143,11 +156,22 @@ public sealed class LocalApiHost
                 "POST /events/app-focus",
                 "POST /events/idle",
                 "POST /events/web",
-                "POST /events/web-session (alias)"
+                "POST /events/web-session (alias)",
+                "POST /events/activity-sample",
+                "POST /events/screenshot",
+                "GET /state/pip"
             },
             auth = new { header = AgentTokenAuthMiddleware.HeaderName },
             serverTimeUtc = DateTimeOffset.UtcNow
         }));
+        
+        app.MapGet("/state/pip", () =>
+        {
+            lock (_pipStateSync)
+            {
+                return Results.Ok(_pipState);
+            }
+        });
 
         app.MapPost("/events/web", (WebEvent evt, CancellationToken ct) =>
             HandleWebEventAsync(evt, app.Logger, ct));
@@ -178,6 +202,59 @@ public sealed class LocalApiHost
             var idleDuration = TimeSpan.FromSeconds(req.IdleSeconds);
             await _idleSessionizer.HandleIdleStateAsync(idleDuration, timestamp);
             await _webSessionizer.HandleIdleStateAsync(idleDuration, timestamp);
+            return Results.Ok(new { received = true });
+        });
+
+        app.MapPost("/events/activity-sample", async (ActivitySampleRequest req, CancellationToken ct) =>
+        {
+            if (_outboxRepo is null)
+            {
+                return Results.Problem("Outbox unavailable.");
+            }
+
+            if (string.IsNullOrWhiteSpace(req.ProcessName) || string.IsNullOrWhiteSpace(req.MonitorId))
+            {
+                return Results.BadRequest("processName and monitorId are required.");
+            }
+
+            var timestamp = req.TimestampUtc == default ? DateTimeOffset.UtcNow : req.TimestampUtc;
+            var dto = new MonitorSessionDto(
+                Guid.NewGuid(),
+                timestamp,
+                req.MonitorId,
+                Math.Max(1, req.MonitorWidth),
+                Math.Max(1, req.MonitorHeight),
+                req.ProcessName,
+                req.WindowTitle,
+                req.WindowBounds.X,
+                req.WindowBounds.Y,
+                req.WindowBounds.Width,
+                req.WindowBounds.Height,
+                req.IsSplitScreen,
+                req.IsPiPActive,
+                req.AttentionScore);
+
+            await _outboxRepo.EnqueueAsync("monitor_session", dto);
+            return Results.Ok(new { received = true });
+        });
+
+        app.MapPost("/events/screenshot", async (ScreenshotEventRequest req) =>
+        {
+            if (_outboxRepo is null)
+            {
+                return Results.Problem("Outbox unavailable.");
+            }
+
+            if (string.IsNullOrWhiteSpace(req.MonitorId)
+                || string.IsNullOrWhiteSpace(req.FilePath)
+                || string.IsNullOrWhiteSpace(req.TriggerReason))
+            {
+                return Results.BadRequest("monitorId, filePath and triggerReason are required.");
+            }
+
+            var timestamp = req.TimestampUtc == default ? DateTimeOffset.UtcNow : req.TimestampUtc;
+            var dto = new ScreenshotDto(Guid.NewGuid(), timestamp, req.MonitorId, req.FilePath, req.TriggerReason);
+            await _outboxRepo.EnqueueAsync("screenshot", dto);
             return Results.Ok(new { received = true });
         });
 
@@ -212,8 +289,44 @@ public sealed class LocalApiHost
             evt.Browser,
             evt.Timestamp);
 
+        lock (_pipStateSync)
+        {
+            _pipState = new LocalPipStateResponse(
+                evt.PipActive == true,
+                evt.VideoPlaying == true,
+                evt.VideoUrl,
+                evt.VideoDomain,
+                evt.Timestamp);
+        }
+
         await _queue.Channel.Writer.WriteAsync(evt, ct);
         return Results.Ok(new { received = true });
+    }
+
+    private bool IsOriginAllowed(string origin)
+    {
+        if (_allowedOrigins.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (var allowed in _allowedOrigins)
+        {
+            if (allowed.EndsWith('*'))
+            {
+                var prefix = allowed[..^1];
+                if (origin.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            else if (string.Equals(origin, allowed, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private sealed record AppFocusRequest(string AppName, string? WindowTitle, DateTimeOffset TimestampUtc);

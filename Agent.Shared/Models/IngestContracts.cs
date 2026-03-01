@@ -37,10 +37,15 @@ public record WebEventIngestRequest(
     DateTimeOffset SentAt,
     Guid EventId,
     string Domain,
-    string Title,
-    string Url,
+    string? Title,
+    string? Url,
     DateTimeOffset Timestamp,
-    string Browser
+    string? Browser,
+    bool? PipActive = null,
+    bool? VideoPlaying = null,
+    string? VideoUrl = null,
+    string? VideoDomain = null,
+    int? TabId = null
 );
 
 public record WebEventBatchItem(
@@ -49,7 +54,12 @@ public record WebEventBatchItem(
     string? Title,
     string? Url,
     DateTimeOffset Timestamp,
-    string Browser
+    string? Browser,
+    bool? PipActive = null,
+    bool? VideoPlaying = null,
+    string? VideoUrl = null,
+    string? VideoDomain = null,
+    int? TabId = null
 );
 
 public record WebEventBatchRequest(
@@ -96,3 +106,42 @@ public record DeviceSessionIngestRequest(
     DateTimeOffset SentAt,
     List<DeviceSessionDto> Sessions
 );
+
+public record MonitorSessionDto(
+    Guid SessionId,
+    DateTimeOffset Timestamp,
+    string MonitorId,
+    int ResolutionWidth,
+    int ResolutionHeight,
+    string ActiveWindowProcess,
+    string? ActiveWindowTitle,
+    int WindowX,
+    int WindowY,
+    int WindowWidth,
+    int WindowHeight,
+    bool IsSplitScreen,
+    bool IsPiPActive,
+    int AttentionScore);
+
+public record ScreenshotDto(
+    Guid ScreenshotId,
+    DateTimeOffset Timestamp,
+    string MonitorId,
+    string FilePath,
+    string TriggerReason);
+
+public record MonitorSessionIngestRequest(
+    string DeviceId,
+    string AgentVersion,
+    Guid BatchId,
+    long Sequence,
+    DateTimeOffset SentAt,
+    List<MonitorSessionDto> Sessions);
+
+public record ScreenshotIngestRequest(
+    string DeviceId,
+    string AgentVersion,
+    Guid BatchId,
+    long Sequence,
+    DateTimeOffset SentAt,
+    List<ScreenshotDto> Screenshots);

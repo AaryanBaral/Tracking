@@ -1,18 +1,13 @@
-// Agent.Windows/Program.cs
-// How to test:
-// 1) Start Agent.Service.
-// 2) Set AGENT_LOCAL_API_TOKEN (and AGENT_LOCAL_API_URL if needed).
-// 3) Run Agent.Windows from a console.
-// 4) Query /local/outbox/stats on the local API to confirm events.
-using System.Text.Json;
 using Agent.Shared.Config;
 using Agent.Shared.LocalApi;
 using Agent.Shared.Models;
+using Agent.Shared.Runtime;
 using Agent.Windows.Native;
+using Agent.Windows.Processing;
+using Agent.Windows.Services;
 
 internal static class Program
 {
-    // Exit codes (keep consistent for debugging/automation)
     private const int ExitOk = 0;
     private const int ExitMissingToken = 2;
     private const int ExitUnauthorized = 3;
@@ -29,16 +24,19 @@ internal static class Program
     {
         var cliUrl = GetArgValue(args, "--url");
         var cliToken = GetArgValue(args, "--token");
+        var configPaths = GetConfigPaths().ToArray();
 
-        var apiBaseUrl = cliUrl
-            ?? Environment.GetEnvironmentVariable(LocalApiUrlEnv)
-            ?? ResolveLocalApiUrlFromConfig();
-        if (string.IsNullOrWhiteSpace(apiBaseUrl))
-        {
-            apiBaseUrl = LocalApiConstants.DefaultBaseUrl;
-        }
+        var apiBaseUrl = LocalApiRuntimeResolver.ResolveBaseUrl(
+            cliUrl,
+            LocalApiUrlEnv,
+            configPaths,
+            LocalApiConstants.DefaultBaseUrl);
 
-        var token = ResolveToken(cliToken, out var tokenSource);
+        var (token, tokenSource) = LocalApiRuntimeResolver.ResolveToken(
+            cliToken,
+            LocalApiTokenEnv,
+            configPaths,
+            new AgentConfig().GlobalLocalApiToken);
 
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -46,26 +44,25 @@ internal static class Program
             return ExitMissingToken;
         }
 
-        var pollSeconds = ReadIntEnv(PollSecondsEnv, 1);
+        var pollSeconds = ReadIntEnv(PollSecondsEnv, 2);
         var failureExitSeconds = ReadIntEnv(FailureExitSecondsEnv, 60);
+        var runtimeSettings = AgentRuntimeSettingsLoader.Load(configPaths);
 
         LogStartupSummary(apiBaseUrl, pollSeconds, failureExitSeconds, tokenSource);
 
         using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         var apiClient = new LocalApiClient(httpClient, apiBaseUrl, token);
+        var processor = new WindowsActivityProcessor(
+            apiClient,
+            new WindowsScreenshotService(),
+            LogPostFailure,
+            message => Console.Error.WriteLine(message));
 
-        // Graceful stop (useful for manual testing)
         using var cts = new CancellationTokenSource();
         void RequestStop()
         {
-            try
-            {
-                cts.Cancel();
-            }
-            catch (ObjectDisposedException)
-            {
-                // ProcessExit can fire after disposal.
-            }
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { }
         }
 
         Console.CancelKeyPress += (_, e) =>
@@ -98,11 +95,12 @@ internal static class Program
 
         LogConnected(version.Value);
 
-        // Main loop
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(pollSeconds));
         var lastSuccessAt = DateTimeOffset.UtcNow;
         var failureWindow = TimeSpan.FromSeconds(failureExitSeconds);
         var unreachableSinceLastSuccess = false;
+        var lastForegroundSignature = string.Empty;
+        DateTimeOffset? lastScreenshotAt = null;
 
         try
         {
@@ -111,56 +109,45 @@ internal static class Program
                 var now = DateTimeOffset.UtcNow;
                 var hadSuccess = false;
                 var hadUnreachable = false;
+                var currentForegroundSignature = lastForegroundSignature;
 
-                // 1) Idle
-                try
+                var idleResult = await ProcessIdleSampleAsync(apiClient, now, cts.Token);
+                hadSuccess |= idleResult.HadSuccess;
+                hadUnreachable |= idleResult.HadUnreachable;
+                if (idleResult.Unauthorized)
                 {
-                    var idleSeconds = WindowsInput.GetIdleSeconds();
-                    var idlePayload = new IdleSampleRequest(idleSeconds, now);
-                    var idleResult = await apiClient.PostIdleAsync(idlePayload, cts.Token);
-                    if (idleResult.Success)
-                    {
-                        hadSuccess = true;
-                    }
-                    else
-                    {
-                        LogPostFailure("idle", idleResult);
-                        hadUnreachable |= idleResult.StatusCode is null;
-                        if (idleResult.IsUnauthorized) return ExitUnauthorized;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"Idle sample failed: {ex.Message}");
+                    return ExitUnauthorized;
                 }
 
-                // 2) Foreground app + window title
-                try
+                var appResult = await ProcessForegroundSampleAsync(apiClient, now, cts.Token);
+                hadSuccess |= appResult.HadSuccess;
+                hadUnreachable |= appResult.HadUnreachable;
+                if (appResult.Unauthorized)
                 {
-                    var fg = WindowsInput.GetForegroundApp();
-                    if (fg is not null && !string.IsNullOrWhiteSpace(fg.AppName))
-                    {
-                        var appName = TruncateRequired(fg.AppName, 128);
-                        var windowTitle = TruncateOptional(fg.WindowTitle, 256);
+                    return ExitUnauthorized;
+                }
 
-                        var appPayload = new AppFocusRequest(appName, windowTitle, now);
-                        var appResult = await apiClient.PostAppFocusAsync(appPayload, cts.Token);
-                        if (appResult.Success)
-                        {
-                            hadSuccess = true;
-                        }
-                        else
-                        {
-                            LogPostFailure("app-focus", appResult);
-                            hadUnreachable |= appResult.StatusCode is null;
-                            if (appResult.IsUnauthorized) return ExitUnauthorized;
-                        }
-                    }
-                }
-                catch (Exception ex)
+                if (!string.IsNullOrWhiteSpace(appResult.ForegroundSignature))
                 {
-                    Console.Error.WriteLine($"App focus sample failed: {ex.Message}");
+                    currentForegroundSignature = appResult.ForegroundSignature;
                 }
+
+                var activityResult = await processor.ProcessAsync(
+                    now,
+                    runtimeSettings,
+                    currentForegroundSignature,
+                    lastScreenshotAt,
+                    cts.Token);
+
+                hadSuccess |= activityResult.HadSuccess;
+                hadUnreachable |= activityResult.HadUnreachable;
+                if (activityResult.Unauthorized)
+                {
+                    return ExitUnauthorized;
+                }
+
+                lastForegroundSignature = activityResult.ForegroundSignature;
+                lastScreenshotAt = activityResult.LastScreenshotAt;
 
                 if (hadSuccess)
                 {
@@ -191,6 +178,62 @@ internal static class Program
 
         Console.WriteLine("Agent.Windows stopping.");
         return ExitOk;
+    }
+
+    private static async Task<(bool HadSuccess, bool HadUnreachable, bool Unauthorized)> ProcessIdleSampleAsync(
+        LocalApiClient apiClient,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        try
+        {
+            var idleSeconds = WindowsInput.GetIdleSeconds();
+            var result = await apiClient.PostIdleAsync(new IdleSampleRequest(idleSeconds, now), ct);
+            if (result.Success)
+            {
+                return (true, false, false);
+            }
+
+            LogPostFailure("idle", result);
+            return (false, result.StatusCode is null, result.IsUnauthorized);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Idle sample failed: {ex.Message}");
+            return (false, false, false);
+        }
+    }
+
+    private static async Task<(bool HadSuccess, bool HadUnreachable, bool Unauthorized, string? ForegroundSignature)> ProcessForegroundSampleAsync(
+        LocalApiClient apiClient,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        try
+        {
+            var fg = WindowsInput.GetForegroundApp();
+            if (fg is null || string.IsNullOrWhiteSpace(fg.AppName))
+            {
+                return (false, false, false, null);
+            }
+
+            var appName = TruncateRequired(fg.AppName, 128);
+            var windowTitle = TruncateOptional(fg.WindowTitle, 256);
+
+            var result = await apiClient.PostAppFocusAsync(new AppFocusRequest(appName, windowTitle, now), ct);
+            if (result.Success)
+            {
+                return (true, false, false, $"{appName}|{windowTitle}");
+            }
+
+            LogPostFailure("app-focus", result);
+            return (false, result.StatusCode is null, result.IsUnauthorized, null);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"App focus sample failed: {ex.Message}");
+            return (false, false, false, null);
+        }
     }
 
     private static int HandlePreflightFailure(string step, bool isUnauthorized, string? error)
@@ -248,7 +291,6 @@ internal static class Program
         Console.Error.WriteLine($"POST /events/{kind} failed: {status} {detail}");
     }
 
-
     private static string TruncateRequired(string? value, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(value)) return string.Empty;
@@ -267,92 +309,6 @@ internal static class Program
     {
         var raw = Environment.GetEnvironmentVariable(name);
         return int.TryParse(raw, out var parsed) && parsed > 0 ? parsed : defaultValue;
-    }
-
-    private static string ResolveToken(string? cliToken, out string tokenSource)
-    {
-        if (!string.IsNullOrWhiteSpace(cliToken))
-        {
-            tokenSource = "cli";
-            return cliToken;
-        }
-
-        var token = Environment.GetEnvironmentVariable(LocalApiTokenEnv);
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            tokenSource = LocalApiTokenEnv;
-            return token;
-        }
-
-        token = ResolveLocalApiTokenFromConfig();
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            tokenSource = "appsettings.json";
-            return token;
-        }
-
-        token = new AgentConfig().GlobalLocalApiToken;
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            tokenSource = "AgentConfig.GlobalLocalApiToken";
-            return token;
-        }
-
-        tokenSource = "missing";
-        return string.Empty;
-    }
-
-    private static string? ResolveLocalApiTokenFromConfig()
-    {
-        foreach (var path in GetConfigPaths())
-        {
-            if (!File.Exists(path)) continue;
-            try
-            {
-                using var stream = File.OpenRead(path);
-                using var doc = JsonDocument.Parse(stream);
-                if (doc.RootElement.TryGetProperty("LocalApi", out var localApi) &&
-                    localApi.TryGetProperty("Token", out var tokenProp))
-                {
-                    var token = tokenProp.GetString();
-                    if (!string.IsNullOrWhiteSpace(token))
-                    {
-                        return token;
-                    }
-                }
-            }
-            catch
-            {
-                // ignore invalid config files
-            }
-        }
-
-        return null;
-    }
-
-    private static string? ResolveLocalApiUrlFromConfig()
-    {
-        foreach (var path in GetConfigPaths())
-        {
-            if (!File.Exists(path)) continue;
-            try
-            {
-                using var stream = File.OpenRead(path);
-                using var doc = JsonDocument.Parse(stream);
-                if (doc.RootElement.TryGetProperty("Agent", out var agent) &&
-                    agent.TryGetProperty("LocalApiPort", out var portProp) &&
-                    portProp.TryGetInt32(out var port) && port > 0)
-                {
-                    return $"http://127.0.0.1:{port}";
-                }
-            }
-            catch
-            {
-                // ignore invalid config files
-            }
-        }
-
-        return null;
     }
 
     private static IEnumerable<string> GetConfigPaths()
@@ -379,6 +335,7 @@ internal static class Program
                 {
                     return args[i + 1];
                 }
+
                 return null;
             }
 

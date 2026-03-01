@@ -10,5 +10,10 @@ public class WebEvent
     public string? Url { get; set; }
     public DateTimeOffset Timestamp { get; set; }
     public string? Browser { get; set; }
+    public bool? PipActive { get; set; }
+    public bool? VideoPlaying { get; set; }
+    public string? VideoUrl { get; set; }
+    public string? VideoDomain { get; set; }
+    public int? TabId { get; set; }
     public DateTimeOffset ReceivedAt { get; set; }
 }

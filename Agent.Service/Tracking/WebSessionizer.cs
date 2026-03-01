@@ -17,6 +17,8 @@ public sealed class WebSessionizer
     private DateTimeOffset? _lastUserActiveAt;
     private bool _isBrowserForeground;
     private bool _hasAppFocusSignal;
+    private bool _pipActive;
+    private bool _videoPlaying;
     private readonly TimeSpan _foregroundGrace;
     private readonly TimeSpan _idleGrace;
     private readonly TimeSpan _checkpointInterval;
@@ -50,12 +52,14 @@ public sealed class WebSessionizer
             _deviceId = deviceId;
             var browser = string.IsNullOrWhiteSpace(evt.Browser) ? "chromium" : evt.Browser;
             _currentTab = new CurrentTab(evt.Domain, evt.Url, evt.Title, browser, ts);
+            _pipActive = evt.PipActive ?? _pipActive;
+            _videoPlaying = evt.VideoPlaying ?? _videoPlaying;
 
-            var canUseEventAsActivity = !_hasAppFocusSignal || _isBrowserForeground;
+            var canUseEventAsActivity = _pipActive || !_hasAppFocusSignal || _isBrowserForeground;
             if (canUseEventAsActivity)
             {
                 _lastBrowserActiveAt = ts;
-                _lastUserActiveAt = ts;
+                _lastUserActiveAt = _videoPlaying || _pipActive ? ts : _lastUserActiveAt ?? ts;
                 if (!_hasAppFocusSignal)
                 {
                     _isBrowserForeground = true;
@@ -85,9 +89,17 @@ public sealed class WebSessionizer
             else
             {
                 _isBrowserForeground = false;
-                _lastBrowserActiveAt = null;
-                _currentTab = null;
-                sessionToClose = CloseActiveLocked(timestamp);
+                if (_pipActive)
+                {
+                    _lastBrowserActiveAt = timestamp;
+                    sessionToClose = EvaluateSessionLocked(timestamp);
+                }
+                else
+                {
+                    _lastBrowserActiveAt = null;
+                    _currentTab = null;
+                    sessionToClose = CloseActiveLocked(timestamp);
+                }
             }
         }
 
@@ -309,6 +321,11 @@ public sealed class WebSessionizer
 
     private bool IsBrowserActive(DateTimeOffset now)
     {
+        if (_pipActive)
+        {
+            return true;
+        }
+
         if (_isBrowserForeground)
         {
             return true;

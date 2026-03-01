@@ -42,7 +42,11 @@ echo "Waiting for Service to start..."
 sleep 5
 
 echo "Starting Agent.Mac..."
-export AGENT_LOCAL_API_TOKEN="dev-token-123"
+if [ -z "${AGENT_LOCAL_API_TOKEN:-}" ]; then
+    echo "AGENT_LOCAL_API_TOKEN is required. Export it before running this script."
+    kill "$SERVICE_PID" 2>/dev/null
+    exit 1
+fi
 dotnet run --project "$MAC_DIR" &
 MAC_PID=$!
 

@@ -300,6 +300,8 @@ public static class CompaniesEndpoints
             await db.AppSessions.Where(s => deviceIds.Contains(s.DeviceId)).ExecuteDeleteAsync(ct);
             await db.IdleSessions.Where(s => deviceIds.Contains(s.DeviceId)).ExecuteDeleteAsync(ct);
             await db.DeviceSessions.Where(s => deviceIds.Contains(s.DeviceId)).ExecuteDeleteAsync(ct);
+            await db.MonitorSessions.Where(s => deviceIds.Contains(s.DeviceId)).ExecuteDeleteAsync(ct);
+            await db.Screenshots.Where(s => deviceIds.Contains(s.DeviceId)).ExecuteDeleteAsync(ct);
             await db.IngestCursors.Where(c => deviceIds.Contains(c.DeviceId)).ExecuteDeleteAsync(ct);
             await db.Devices.Where(d => deviceIds.Contains(d.Id)).ExecuteDeleteAsync(ct);
         }

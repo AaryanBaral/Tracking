@@ -60,6 +60,7 @@ builder.ConfigureServices((context, services) =>
     services.AddHostedService<ShutdownFlushService>();
     services.AddHostedService<OutboxSenderWorker>();
     services.AddHostedService<DeviceSessionWorker>();
+    services.AddHostedService<CollectorWorker>();
     services.AddHostedService<Worker>(); // Local API + Web Events
     services.AddHostedService<HeartbeatWorker>();
 

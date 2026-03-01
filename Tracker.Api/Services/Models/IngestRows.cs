@@ -8,6 +8,11 @@ public sealed record WebEventRow(
     string? Url,
     DateTimeOffset Timestamp,
     string? Browser,
+    bool? PipActive,
+    bool? VideoPlaying,
+    string? VideoUrl,
+    string? VideoDomain,
+    int? TabId,
     DateTimeOffset ReceivedAt);
 
 public sealed record WebSessionRow(
@@ -38,3 +43,28 @@ public sealed record DeviceSessionRow(
     string DeviceId,
     DateTimeOffset StartAt,
     DateTimeOffset EndAt);
+
+public sealed record MonitorSessionRow(
+    Guid SessionId,
+    string DeviceId,
+    DateTimeOffset Timestamp,
+    string MonitorId,
+    int ResolutionWidth,
+    int ResolutionHeight,
+    string ActiveWindowProcess,
+    string? ActiveWindowTitle,
+    int WindowX,
+    int WindowY,
+    int WindowWidth,
+    int WindowHeight,
+    bool IsSplitScreen,
+    bool IsPiPActive,
+    int AttentionScore);
+
+public sealed record ScreenshotRow(
+    Guid ScreenshotId,
+    string DeviceId,
+    DateTimeOffset Timestamp,
+    string MonitorId,
+    string FilePath,
+    string TriggerReason);

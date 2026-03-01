@@ -46,6 +46,8 @@ public sealed class OutboxSenderWorker : BackgroundService
             ["app_session"] = (_config.AppSessionIngestEndpoint, c => c.AppSessionBatchSize, c => (c.AppSessionSendMinSeconds, c.AppSessionSendMaxSeconds)),
             ["idle_session"] = (_config.IdleSessionIngestEndpoint, c => c.IdleSessionBatchSize, c => (c.IdleSessionSendMinSeconds, c.IdleSessionSendMaxSeconds)),
             ["device_session"] = (_config.DeviceSessionIngestEndpoint, c => c.DeviceSessionBatchSize, c => (c.DeviceSessionSendMinSeconds, c.DeviceSessionSendMaxSeconds)),
+            ["monitor_session"] = (_config.MonitorSessionIngestEndpoint, c => c.MonitorSessionBatchSize, c => (c.MonitorSessionSendMinSeconds, c.MonitorSessionSendMaxSeconds)),
+            ["screenshot"] = (_config.ScreenshotIngestEndpoint, c => c.ScreenshotBatchSize, c => (c.ScreenshotSendMinSeconds, c.ScreenshotSendMaxSeconds)),
         };
     }
 
@@ -141,7 +143,12 @@ public sealed class OutboxSenderWorker : BackgroundService
                             evt.Title ?? "",
                             evt.Url ?? "",
                             evt.Timestamp,
-                            evt.Browser
+                            evt.Browser,
+                            evt.PipActive,
+                            evt.VideoPlaying,
+                            evt.VideoUrl,
+                            evt.VideoDomain,
+                            evt.TabId
                         ));
                     }
                 }
@@ -239,6 +246,38 @@ public sealed class OutboxSenderWorker : BackgroundService
                     }
                     if (sessions.Count > 0)
                         payloadToSend = new DeviceSessionIngestRequest(deviceId, agentVersion, batchId, seq, sentAt, sessions);
+                }
+                else if (type == "monitor_session")
+                {
+                    var sessions = new List<MonitorSessionDto>();
+                    foreach (var item in batch)
+                    {
+                        var rec = JsonSerializer.Deserialize<MonitorSessionDto>(item.PayloadJson);
+                        if (rec != null)
+                        {
+                            sessions.Add(rec);
+                        }
+                    }
+                    if (sessions.Count > 0)
+                    {
+                        payloadToSend = new MonitorSessionIngestRequest(deviceId, agentVersion, batchId, seq, sentAt, sessions);
+                    }
+                }
+                else if (type == "screenshot")
+                {
+                    var screenshots = new List<ScreenshotDto>();
+                    foreach (var item in batch)
+                    {
+                        var rec = JsonSerializer.Deserialize<ScreenshotDto>(item.PayloadJson);
+                        if (rec != null)
+                        {
+                            screenshots.Add(rec);
+                        }
+                    }
+                    if (screenshots.Count > 0)
+                    {
+                        payloadToSend = new ScreenshotIngestRequest(deviceId, agentVersion, batchId, seq, sentAt, screenshots);
+                    }
                 }
             }
 

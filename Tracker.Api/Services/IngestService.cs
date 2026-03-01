@@ -49,6 +49,11 @@ public sealed class IngestService : IIngestService
             r.Url,
             r.Timestamp,
             r.Browser,
+            r.PipActive,
+            r.VideoPlaying,
+            r.VideoUrl,
+            r.VideoDomain,
+            r.TabId,
             r.ReceivedAt
         }).ToList();
 
@@ -64,6 +69,11 @@ public sealed class IngestService : IIngestService
                 "Url",
                 "Timestamp",
                 "Browser",
+                "PipActive",
+                "VideoPlaying",
+                "VideoUrl",
+                "VideoDomain",
+                "TabId",
                 "ReceivedAt"
             },
             values,
@@ -238,6 +248,96 @@ public sealed class IngestService : IIngestService
             rows.Count - inserted);
 
         return inserted;
+    }
+
+    public async Task<int> InsertMonitorSessionsAsync(IReadOnlyList<MonitorSessionRow> rows, CancellationToken ct)
+    {
+        _logger.LogInformation("InsertMonitorSessionsAsync called with {count} rows", rows.Count);
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        var values = rows.Select(r => new object?[]
+        {
+            Guid.NewGuid(),
+            r.SessionId,
+            r.DeviceId,
+            r.Timestamp,
+            r.MonitorId,
+            r.ResolutionWidth,
+            r.ResolutionHeight,
+            r.ActiveWindowProcess,
+            r.ActiveWindowTitle,
+            r.WindowX,
+            r.WindowY,
+            r.WindowWidth,
+            r.WindowHeight,
+            r.IsSplitScreen,
+            r.IsPiPActive,
+            r.AttentionScore
+        }).ToList();
+
+        return await InsertRowsAsync(
+            "MonitorSessions",
+            new[]
+            {
+                "Id",
+                "SessionId",
+                "DeviceId",
+                "Timestamp",
+                "MonitorId",
+                "ResolutionWidth",
+                "ResolutionHeight",
+                "ActiveWindowProcess",
+                "ActiveWindowTitle",
+                "WindowX",
+                "WindowY",
+                "WindowWidth",
+                "WindowHeight",
+                "IsSplitScreen",
+                "IsPiPActive",
+                "AttentionScore"
+            },
+            values,
+            "SessionId",
+            ct);
+    }
+
+    public async Task<int> InsertScreenshotsAsync(IReadOnlyList<ScreenshotRow> rows, CancellationToken ct)
+    {
+        _logger.LogInformation("InsertScreenshotsAsync called with {count} rows", rows.Count);
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        var values = rows.Select(r => new object?[]
+        {
+            Guid.NewGuid(),
+            r.ScreenshotId,
+            r.DeviceId,
+            r.Timestamp,
+            r.MonitorId,
+            r.FilePath,
+            r.TriggerReason
+        }).ToList();
+
+        return await InsertRowsAsync(
+            "Screenshots",
+            new[]
+            {
+                "Id",
+                "ScreenshotId",
+                "DeviceId",
+                "Timestamp",
+                "MonitorId",
+                "FilePath",
+                "TriggerReason"
+            },
+            values,
+            "ScreenshotId",
+            ct);
     }
 
     public async Task EnsureDevicesAsync(

@@ -63,6 +63,8 @@ public class Worker : BackgroundService
         var deviceId = identity.DeviceId.ToString();
         _logger.LogInformation("Device identity loaded: {deviceId}", deviceId);
         var localApiPort = _config.LocalApiPort > 0 ? _config.LocalApiPort : LocalApiHost.DefaultPort;
+        ValidateSecureEndpoints();
+        var allowedOrigins = ResolveLocalApiAllowedOrigins();
         LogStartupSummary(deviceId, token, tokenSource, localApiPort, _config.EnableLocalCollectors);
 
         var api = new LocalApiHost(
@@ -74,7 +76,8 @@ public class Worker : BackgroundService
             _outboxRepo,
             _outboxState,
             deviceId,
-            identity.AgentVersion);
+            identity.AgentVersion,
+            allowedOrigins);
         api.Port = localApiPort;
 
         await api.StartAsync(stoppingToken);
@@ -217,4 +220,44 @@ public class Worker : BackgroundService
     }
 
     private const string LocalApiTokenEnv = "AGENT_LOCAL_API_TOKEN";
+    
+    private void ValidateSecureEndpoints()
+    {
+        var endpoints = new[]
+        {
+            _config.WebEventIngestEndpoint,
+            _config.WebSessionIngestEndpoint,
+            _config.AppSessionIngestEndpoint,
+            _config.IdleSessionIngestEndpoint,
+            _config.DeviceSessionIngestEndpoint,
+            _config.MonitorSessionIngestEndpoint,
+            _config.ScreenshotIngestEndpoint,
+            _config.DeviceHeartbeatEndpoint
+        };
+
+        foreach (var endpoint in endpoints)
+        {
+            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+            {
+                throw new InvalidOperationException($"Invalid endpoint URI: {endpoint}");
+            }
+
+            var loopback = uri.IsLoopback || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase);
+            if (!loopback && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"Endpoint must use HTTPS: {endpoint}");
+            }
+        }
+    }
+
+    private IReadOnlyList<string> ResolveLocalApiAllowedOrigins()
+    {
+        return _configuration.GetSection("LocalApi:AllowedOrigins")
+            .Get<string[]>()?
+            .Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Select(origin => origin.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray()
+            ?? Array.Empty<string>();
+    }
 }

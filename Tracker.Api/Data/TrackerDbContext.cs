@@ -19,6 +19,8 @@ public class TrackerDbContext : DbContext
     public DbSet<AppSession> AppSessions => Set<AppSession>();
     public DbSet<IdleSession> IdleSessions => Set<IdleSession>();
     public DbSet<DeviceSession> DeviceSessions => Set<DeviceSession>();
+    public DbSet<MonitorSession> MonitorSessions => Set<MonitorSession>();
+    public DbSet<Screenshot> Screenshots => Set<Screenshot>();
     public DbSet<IdleSecondsRow> IdleSecondsRows => Set<IdleSecondsRow>();
     public DbSet<DomainSummaryRow> DomainSummaryRows => Set<DomainSummaryRow>();
     public DbSet<AppSummaryRow> AppSummaryRows => Set<AppSummaryRow>();
@@ -96,6 +98,12 @@ public class TrackerDbContext : DbContext
             .Property(e => e.Browser)
             .HasMaxLength(64);
         modelBuilder.Entity<WebEvent>()
+            .Property(e => e.VideoUrl)
+            .HasMaxLength(2048);
+        modelBuilder.Entity<WebEvent>()
+            .Property(e => e.VideoDomain)
+            .HasMaxLength(255);
+        modelBuilder.Entity<WebEvent>()
             .Property(e => e.ReceivedAt)
             .IsRequired();
 
@@ -152,6 +160,44 @@ public class TrackerDbContext : DbContext
         modelBuilder.Entity<DeviceSession>()
             .Property(s => s.SessionId)
             .IsRequired();
+
+        modelBuilder.Entity<MonitorSession>()
+            .HasIndex(s => new { s.DeviceId, s.Timestamp });
+        modelBuilder.Entity<MonitorSession>()
+            .HasIndex(s => new { s.DeviceId, s.MonitorId, s.Timestamp });
+        modelBuilder.Entity<MonitorSession>()
+            .HasIndex(s => s.SessionId)
+            .IsUnique();
+        modelBuilder.Entity<MonitorSession>()
+            .Property(s => s.SessionId)
+            .IsRequired();
+        modelBuilder.Entity<MonitorSession>()
+            .Property(s => s.MonitorId)
+            .HasMaxLength(128);
+        modelBuilder.Entity<MonitorSession>()
+            .Property(s => s.ActiveWindowProcess)
+            .HasMaxLength(255);
+        modelBuilder.Entity<MonitorSession>()
+            .Property(s => s.ActiveWindowTitle)
+            .HasMaxLength(512);
+
+        modelBuilder.Entity<Screenshot>()
+            .HasIndex(s => new { s.DeviceId, s.Timestamp });
+        modelBuilder.Entity<Screenshot>()
+            .HasIndex(s => s.ScreenshotId)
+            .IsUnique();
+        modelBuilder.Entity<Screenshot>()
+            .Property(s => s.ScreenshotId)
+            .IsRequired();
+        modelBuilder.Entity<Screenshot>()
+            .Property(s => s.MonitorId)
+            .HasMaxLength(128);
+        modelBuilder.Entity<Screenshot>()
+            .Property(s => s.FilePath)
+            .HasMaxLength(2048);
+        modelBuilder.Entity<Screenshot>()
+            .Property(s => s.TriggerReason)
+            .HasMaxLength(128);
 
         modelBuilder.Entity<IdleSecondsRow>().HasNoKey();
         modelBuilder.Entity<DomainSummaryRow>().HasNoKey();

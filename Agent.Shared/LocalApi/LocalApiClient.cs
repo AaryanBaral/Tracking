@@ -26,6 +26,9 @@ public sealed class LocalApiClient
 
     public Task<LocalApiResult<LocalDiagResponse>> GetDiagAsync(CancellationToken ct)
         => SendAsync<LocalDiagResponse>(HttpMethod.Get, "/diag", null, ct);
+    
+    public Task<LocalApiResult<LocalPipStateResponse>> GetPipStateAsync(CancellationToken ct)
+        => SendAsync<LocalPipStateResponse>(HttpMethod.Get, "/state/pip", null, ct);
 
     public Task<LocalApiResult> PostIdleAsync(IdleSampleRequest request, CancellationToken ct)
         => SendAsync(HttpMethod.Post, "/events/idle", request, ct);
@@ -35,6 +38,12 @@ public sealed class LocalApiClient
 
     public Task<LocalApiResult> PostWebEventAsync(WebEvent request, CancellationToken ct)
         => SendAsync(HttpMethod.Post, "/events/web", request, ct);
+
+    public Task<LocalApiResult> PostActivitySampleAsync(ActivitySampleRequest request, CancellationToken ct)
+        => SendAsync(HttpMethod.Post, "/events/activity-sample", request, ct);
+
+    public Task<LocalApiResult> PostScreenshotAsync(ScreenshotEventRequest request, CancellationToken ct)
+        => SendAsync(HttpMethod.Post, "/events/screenshot", request, ct);
 
     private async Task<LocalApiResult<T>> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken ct)
     {

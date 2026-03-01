@@ -6,5 +6,10 @@ public sealed record WebEvent(
     string? Title,
     string? Url,
     DateTimeOffset Timestamp,
-    string Browser
+    string Browser,
+    bool? PipActive = null,
+    bool? VideoPlaying = null,
+    string? VideoUrl = null,
+    string? VideoDomain = null,
+    int? TabId = null
 );

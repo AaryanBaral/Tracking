@@ -48,7 +48,12 @@ public sealed record WebEventIngestRequest(
     string? Title,
     string? Url,
     DateTimeOffset Timestamp,
-    string? Browser);
+    string? Browser,
+    bool? PipActive = null,
+    bool? VideoPlaying = null,
+    string? VideoUrl = null,
+    string? VideoDomain = null,
+    int? TabId = null);
 
 public sealed record WebEventBatchItem(
     Guid EventId,
@@ -56,7 +61,12 @@ public sealed record WebEventBatchItem(
     string? Title,
     string? Url,
     DateTimeOffset Timestamp,
-    string? Browser);
+    string? Browser,
+    bool? PipActive = null,
+    bool? VideoPlaying = null,
+    string? VideoUrl = null,
+    string? VideoDomain = null,
+    int? TabId = null);
 
 public sealed record WebEventBatchRequest(
     string DeviceId,
@@ -141,3 +151,42 @@ public sealed record DeviceSessionIngestRequest(
     long Sequence,
     DateTimeOffset SentAt,
     IReadOnlyList<DeviceSessionDto> Sessions);
+
+public sealed record MonitorSessionDto(
+    Guid SessionId,
+    DateTimeOffset Timestamp,
+    string MonitorId,
+    int ResolutionWidth,
+    int ResolutionHeight,
+    string ActiveWindowProcess,
+    string? ActiveWindowTitle,
+    int WindowX,
+    int WindowY,
+    int WindowWidth,
+    int WindowHeight,
+    bool IsSplitScreen,
+    bool IsPiPActive,
+    int AttentionScore);
+
+public sealed record ScreenshotDto(
+    Guid ScreenshotId,
+    DateTimeOffset Timestamp,
+    string MonitorId,
+    string FilePath,
+    string TriggerReason);
+
+public sealed record MonitorSessionIngestRequest(
+    string DeviceId,
+    string AgentVersion,
+    Guid BatchId,
+    long Sequence,
+    DateTimeOffset SentAt,
+    IReadOnlyList<MonitorSessionDto> Sessions);
+
+public sealed record ScreenshotIngestRequest(
+    string DeviceId,
+    string AgentVersion,
+    Guid BatchId,
+    long Sequence,
+    DateTimeOffset SentAt,
+    IReadOnlyList<ScreenshotDto> Screenshots);

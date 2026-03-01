@@ -35,7 +35,10 @@ public sealed class CollectorWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var interval = Math.Max(1, _config.CollectorPollSeconds);
+        var configured = _config.ActivitySampleIntervalSeconds > 0
+            ? _config.ActivitySampleIntervalSeconds
+            : _config.CollectorPollSeconds;
+        var interval = Math.Max(1, configured);
         var timer = new PeriodicTimer(TimeSpan.FromSeconds(interval));
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
