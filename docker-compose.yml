@@ -1,5 +1,4 @@
 version: '3.9'
-
 services:
   api:
     build: .
@@ -17,6 +16,7 @@ services:
       Logging__File__RetainedFileCountLimit: 30
     volumes:
       - ./logs:/app/logs
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
       interval: 30s
