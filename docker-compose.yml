@@ -1,0 +1,24 @@
+version: '3.9'
+
+services:
+  api:
+    build: .
+    container_name: employee_api
+    ports:
+      - "5002:5002"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DOTNET_ENVIRONMENT: Production
+      Logging__Console__FormatterName: json
+      Logging__LogLevel__Default: Warning
+      Logging__File__Path: /app/logs/app.log
+      Logging__File__RollingInterval: Day
+      Logging__File__FileSizeLimitBytes: 10485760
+      Logging__File__RetainedFileCountLimit: 30
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
