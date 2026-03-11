@@ -5,8 +5,6 @@ using Agent.Service.Tracking;
 using Agent.Service.Workers;
 using Agent.Shared.Abstractions;
 using Agent.Shared.Config;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Options;
 using Agent.Service.Infrastructure;

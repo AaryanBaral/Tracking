@@ -161,6 +161,7 @@ public class OutboxRepository
         var now = DateTimeOffset.UtcNow;
         var nowStr = now.ToString("O");
         var leaseExpiry = now.AddSeconds(_config.OutboxLeaseSeconds).ToString("O");
+        var maxRetries = _config.OutboxMaxRetryAttempts;
 
         // Select IDs to lock
         // Logic: Not Sent AND (Not Locked OR Lock Expired) AND Due
@@ -173,12 +174,14 @@ public class OutboxRepository
               AND SentAt IS NULL
               AND (LockedUntilUtc IS NULL OR LockedUntilUtc < $now)
               AND NextAttemptAt <= $now
+              AND ($maxRetries <= 0 OR AttemptCount < $maxRetries)
             ORDER BY Id ASC
             LIMIT $limit
         ";
         selectCmd.Parameters.AddWithValue("$type", type);
         selectCmd.Parameters.AddWithValue("$now", nowStr);
         selectCmd.Parameters.AddWithValue("$limit", limit);
+        selectCmd.Parameters.AddWithValue("$maxRetries", maxRetries);
 
         var items = new List<OutboxItem>();
         using (var reader = await selectCmd.ExecuteReaderAsync())
@@ -256,6 +259,16 @@ public class OutboxRepository
             var attempts = (long)(await getCmd.ExecuteScalarAsync() ?? 0L);
 
             var nextAttempts = attempts + 1;
+            if (_config.OutboxMaxRetryAttempts > 0 && nextAttempts >= _config.OutboxMaxRetryAttempts)
+            {
+                using var deleteCmd = connection.CreateCommand();
+                deleteCmd.Transaction = transaction;
+                deleteCmd.CommandText = "DELETE FROM Outbox WHERE Id = $id";
+                deleteCmd.Parameters.AddWithValue("$id", id);
+                await deleteCmd.ExecuteNonQueryAsync();
+                _logger.LogWarning("Dropping outbox item {id} after {attempts} failed attempts.", id, nextAttempts);
+                continue;
+            }
             var baseBackoff = Math.Min(Math.Pow(2, nextAttempts), _config.OutboxMaxBackoffSeconds);
             var jitter = rnd.NextDouble() * 3.0;
             var nextAttemptAt = DateTimeOffset.UtcNow.AddSeconds(baseBackoff + jitter).ToString("O");

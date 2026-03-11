@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Threading.RateLimiting;
 using Tracker.Api.Data;
 using Tracker.Api.Endpoints;
 using Tracker.Api.Middleware;
@@ -56,6 +58,40 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 builder.Services.AddAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    var ingestPermitLimit = builder.Configuration.GetValue("RateLimiting:IngestPermitLimit", 120);
+    var ingestWindowSeconds = builder.Configuration.GetValue("RateLimiting:IngestWindowSeconds", 60);
+    var ingestQueueLimit = builder.Configuration.GetValue("RateLimiting:IngestQueueLimit", 0);
+
+    var authPermitLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
+    var authWindowSeconds = builder.Configuration.GetValue("RateLimiting:AuthWindowSeconds", 60);
+    var authQueueLimit = builder.Configuration.GetValue("RateLimiting:AuthQueueLimit", 0);
+
+    options.AddPolicy("ingest", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = ingestPermitLimit,
+                Window = TimeSpan.FromSeconds(ingestWindowSeconds),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = ingestQueueLimit
+            }));
+
+    options.AddPolicy("auth", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = authPermitLimit,
+                Window = TimeSpan.FromSeconds(authWindowSeconds),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = authQueueLimit
+            }));
+});
 
 var app = builder.Build();
 
@@ -116,6 +152,7 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

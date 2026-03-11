@@ -99,13 +99,14 @@ public sealed class OutboxSenderWorker : BackgroundService
 
     private async Task ProcessTypeAsync(string type, CancellationToken ct)
     {
+        List<OutboxItem> batch = new();
         try
         {
             var (endpoint, sizeSelector, _) = _typeConfig[type];
             var limit = sizeSelector(_config);
             if (limit <= 0) limit = 50;
 
-            var batch = await _outbox.LeaseBatchAsync(type, limit, _instanceId);
+            batch = await _outbox.LeaseBatchAsync(type, limit, _instanceId);
             if (batch.Count == 0) return;
 
             var identity = await _identityStore.GetOrCreateAsync(ct);
@@ -272,6 +273,17 @@ public sealed class OutboxSenderWorker : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing outbox type {type}.", type);
+            if (batch.Count > 0)
+            {
+                try
+                {
+                    await _outbox.AbandonAsync(batch.Select(i => i.Id));
+                }
+                catch (Exception abandonEx)
+                {
+                    _logger.LogError(abandonEx, "Failed to abandon outbox batch for type {type}.", type);
+                }
+            }
         }
     }
 }

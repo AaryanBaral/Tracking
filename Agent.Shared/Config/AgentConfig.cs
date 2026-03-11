@@ -24,6 +24,7 @@ public class AgentConfig
     // Outbox & Sender
     public int OutboxLeaseSeconds { get; set; } = 60;
     public int OutboxMaxBackoffSeconds { get; set; } = 300;
+    public int OutboxMaxRetryAttempts { get; set; } = 10;
     public bool ClearOutboxOnStartup { get; set; } = false;
     public int SenderIntervalSeconds { get; set; } = 5;
     public int WebEventSendMinSeconds { get; set; } = 10;

@@ -13,12 +13,15 @@ public static class IngestEndpoints
 {
     public static IEndpointRouteBuilder MapIngestEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/ingest/web-sessions", IngestWebSessionsAsync);
-        app.MapPost("/ingest/app-sessions", IngestAppSessionsAsync);
-        app.MapPost("/ingest/idle-sessions", IngestIdleSessionsAsync);
-        app.MapPost("/ingest/device-sessions", IngestDeviceSessionsAsync);
-        app.MapPost("/events/web", IngestWebEventAsync);
-        app.MapPost("/events/web/batch", IngestWebEventBatchAsync);
+        var group = app.MapGroup(string.Empty)
+            .RequireRateLimiting("ingest");
+
+        group.MapPost("/ingest/web-sessions", IngestWebSessionsAsync);
+        group.MapPost("/ingest/app-sessions", IngestAppSessionsAsync);
+        group.MapPost("/ingest/idle-sessions", IngestIdleSessionsAsync);
+        group.MapPost("/ingest/device-sessions", IngestDeviceSessionsAsync);
+        group.MapPost("/events/web", IngestWebEventAsync);
+        group.MapPost("/events/web/batch", IngestWebEventBatchAsync);
         return app;
     }
 
