@@ -15,7 +15,7 @@ export const options = {
   },
 };
 
-const baseUrl = __ENV.BASE_URL || "http://localhost:5000";
+const baseUrl = __ENV.BASE_URL || "http://localhost:5002";
 const batchSize = __ENV.BATCH_SIZE ? parseInt(__ENV.BATCH_SIZE, 10) : 25;
 const payloadBytes = new Trend("payload_bytes");
 
